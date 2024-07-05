@@ -1,0 +1,28 @@
+{
+  "name": "sneeuwphp/sneeuw",
+  "description": "❄️  Sneeuw is a modern web framework that simplifies creating full-stack applications.",
+  "keywords": [
+    "php",
+    "framework",
+    "sneeuw"
+  ],
+  "type": "library",
+  "license": "MIT",
+  "autoload": {
+    "psr-4": {
+      "Sneeuw\\": "src/"
+    }
+  },
+  "authors": [
+    {
+      "name": "Julian Ollivieira",
+      "email": "julian.ollivieira@gmail.com"
+    }
+  ],
+  "require": {
+    "php": "^8.3"
+  },
+  "require-dev": {
+    "vimeo/psalm": "^5.25"
+  }
+}
