@@ -7,7 +7,6 @@ use RecursiveIteratorIterator;
 use Sneeuw\Http\HttpMethod;
 use Sneeuw\Http\Request;
 use Sneeuw\Routing\Router;
-use Sneeuw\Routing\RouteType;
 use SplFileInfo;
 
 class Application
@@ -17,6 +16,11 @@ class Application
     public function __construct()
     {
         $this->router = new Router;
+
+        /*$this->router->addRoute(HttpMethod::POST, '/_internal', function (Request $request) {*/
+        /*    $body = file_get_contents('php://input');*/
+        /*    $decoded = json_decode($body, true);*/
+        /*});*/
     }
 
     /**
@@ -43,22 +47,13 @@ class Application
             $this->router->addRoute(
                 HttpMethod::GET,
                 $pathFromPagesRoot,
-                function (string $filePath) use ($path): string {
-                    return file_get_contents($path.$filePath.'.html');
-                },
-                RouteType::FileBased
+                function (Request $request) use ($pathFromPagesRoot) {
+                    $pathFromPagesRoot = ltrim($pathFromPagesRoot, '/');
+
+                    return Render::sendRenderRequest($pathFromPagesRoot);
+                }
             );
         }
-
-        return $this;
-    }
-
-    /**
-     * Instructs the Application to use traditional routes.
-     */
-    public function withTraditionalRoutes(string $path): Application
-    {
-        // TODO:
 
         return $this;
     }

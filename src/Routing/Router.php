@@ -35,7 +35,7 @@ class Router
         // Loop over the routes and find the first one that matches
         foreach ($this->routes as $route) {
             if ($route->path === $path) {
-                $content = ($route->handler)($route->path);
+                $content = ($route->handler)($request);
 
                 return new Response(200, $content);
             }
@@ -47,9 +47,9 @@ class Router
     /**
      * Adds a route.
      *
-     * @param  Closure(string): string  $handler
+     * @param  Closure(Request): string  $handler
      */
-    public function addRoute(HttpMethod $method, string $path, Closure $handler, RouteType $type): void
+    public function addRoute(HttpMethod $method, string $path, Closure $handler, RouteType $type = RouteType::Traditional): void
     {
         $this->routes[] = new Route($method, $path, $handler, $type);
     }

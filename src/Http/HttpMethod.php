@@ -6,4 +6,5 @@ namespace Sneeuw\Http;
 enum HttpMethod: string
 {
     case GET = 'get';
+    case POST = 'post';
 }
