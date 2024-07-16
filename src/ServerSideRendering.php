@@ -2,9 +2,14 @@
 
 namespace Sneeuw;
 
-class Render
+class ServerSideRendering
 {
-    public static function sendRenderRequest(string $path): string
+    public static function render(string $path): string
+    {
+        return self::sendRenderRequest($path);
+    }
+
+    private static function sendRenderRequest(string $path): string
     {
         $context = stream_context_create([
             'http' => [
@@ -14,8 +19,6 @@ class Render
             ],
         ]);
 
-        $response = file_get_contents('http://localhost:2002', false, $context);
-
-        return $response;
+        return file_get_contents('http://localhost:2002', false, $context);
     }
 }
