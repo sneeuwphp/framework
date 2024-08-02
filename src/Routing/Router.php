@@ -34,7 +34,10 @@ class Router
 
         // Loop over the routes and find the first one that matches
         foreach ($this->routes as $route) {
-            if ($route->path === $path) {
+            $pattern = preg_replace('/\{[a-zA-Z0-9_]+\}/', '([a-zA-Z0-9_]+)', $route->path);
+            $pattern = '#^'.$pattern.'$#';
+
+            if (preg_match($pattern, $path)) {
                 $content = ($route->handler)($request);
 
                 return new Response(200, $content);

@@ -37,13 +37,14 @@ class Application
             $relativePath = substr($path, strlen(realpath('.').'/src'));
             $this->componentHashes[md5($relativePath)] = $relativePath;
 
-            $routePath = substr($path, strlen($pages));
+            $originalRoutePath = substr($path, strlen($pages));
+            $routePath = str_replace($originalRoutePath === '/index' ? 'index' : '/index', '', $originalRoutePath);
 
-            $this->router->addRoute(HttpMethod::GET, $routePath, function () use ($routePath) {
+            $this->router->addRoute(HttpMethod::GET, $routePath, function () use ($originalRoutePath) {
                 // TODO: think about how ssr can access current context?
                 // probably: dry run first, see what components are executed with what
                 // params and execute handlers accordingly, and render with given data
-                return ServerSideRendering::render($routePath);
+                return ServerSideRendering::render($originalRoutePath);
             });
         }
 
