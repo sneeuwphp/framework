@@ -2,20 +2,19 @@
 
 namespace Sneeuw\Http;
 
-// TODO: actually implement a good `Response` class.
+/**
+ * Represents an HTTP response.
+ */
 class Response
 {
     public function __construct(
-        private int $code,
-        private ?string $data = null
+        public string $body,
+        public StatusCode $code = StatusCode::OK,
     ) {}
 
     public function send(): void
     {
-        http_response_code($this->code);
-
-        if ($this->data !== null) {
-            echo $this->data;
-        }
+        http_response_code($this->code->value);
+        echo $this->body;
     }
 }

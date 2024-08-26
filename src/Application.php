@@ -2,112 +2,98 @@
 
 namespace Sneeuw;
 
-use RecursiveDirectoryIterator;
-use RecursiveIteratorIterator;
 use Sneeuw\Http\HttpMethod;
 use Sneeuw\Http\Request;
+use Sneeuw\Routing\Route;
+use Sneeuw\Routing\RouteBag;
 use Sneeuw\Routing\Router;
-use SplFileInfo;
+use Sneeuw\Routing\RouteType;
 
-class Application
+/**
+ * Represents the entire application.
+ */
+final readonly class Application
 {
     private Router $router;
 
-    /**
-     * @var array<string, string>
-     */
-    private array $componentHashes = [];
+    private string $root;
 
-    public function __construct()
+    public function __construct(string $root)
     {
+        Environment::readFromFile($root.'/../.env');
+
+        $this->root = $root;
         $this->router = new Router;
     }
 
     /**
-     * Instructs the Application to use file-based routes.
+     * Instructs the `Application` to use file-based routes.
      *
-     * This will walk recursively over all files/directories in the given path
-     * and register each page as a GET route.
+     * Accepts a string pointing to the directory containing the pages structure
+     * and alternatively accepts an array mapping specific subdomains to
+     * directories. Use placeholders ({id}) for dynamic subdomains and an empty
+     * string to match url's without a subdomain.
+     *
+     * @param  string|array<string,string>  $pages
      */
-    public function withFileBasedRoutes(string $pages, string $components): Application
+    public function withFileBasedRoutes(string|array $pages): Application
     {
-        // Discover pages and add GET routes
-        $paths = $this->discoverFiles($pages);
-        foreach ($paths as &$path) {
-            $relativePath = substr($path, strlen(realpath('.').'/src'));
-            $this->componentHashes[md5($relativePath)] = $relativePath;
+        $paths = is_array($pages) ? $pages : ['' => $pages];
+        foreach ($paths as $subdomain => $path) {
+            $filePaths = Discovery::discoverFiles($path);
+            foreach ($filePaths as $filePath) {
+                $targetFilePath = substr($filePath, strlen($path));
+                $routePath = str_replace($targetFilePath === '/index' ? 'index' : '/index', '', $targetFilePath);
 
-            $originalRoutePath = substr($path, strlen($pages));
-            $routePath = str_replace($originalRoutePath === '/index' ? 'index' : '/index', '', $originalRoutePath);
-
-            $this->router->addRoute(HttpMethod::GET, $routePath, function () use ($originalRoutePath) {
-                // TODO: think about how ssr can access current context?
-                // probably: dry run first, see what components are executed with what
-                // params and execute handlers accordingly, and render with given data
-                return ServerSideRendering::render($originalRoutePath);
-            });
+                $this->router->add(new Route(
+                    HttpMethod::GET,
+                    $subdomain,
+                    $routePath,
+                    function ($request, ...$routeParameters) {
+                        // TODO: render the page at $targetFilePath
+                    },
+                    RouteType::FileBased,
+                ));
+            }
         }
-
-        // Discover components and generate hashes
-        $paths = $this->discoverFiles($components);
-        foreach ($paths as &$path) {
-            $relativePath = substr($path, strlen(realpath('.').'/src'));
-            $this->componentHashes[md5($relativePath)] = $relativePath;
-        }
-
-        // Add _internal route for handlers/actions
-        $this->router->addRoute(HttpMethod::POST, '/_internal', function () {
-            /** @var array{ hash: string, action: string, args: string[] } */
-            $body = json_decode(file_get_contents('php://input'), true);
-
-            $component = $this->componentHashes[$body['hash']];
-
-            $contents = file_get_contents(realpath('.').'/src'.$component.'.ski');
-            $handler = str_contains($contents, '---') ? explode('---', $contents)[0] : $contents;
-
-            eval($handler);
-
-            $data = json_encode(call_user_func_array($body['action'], $body['args'] ?? []));
-
-            return $data === false ? '' : $data;
-        });
 
         return $this;
     }
 
     /**
-     * Recursively discovers files in the given directory and it's
-     * subdirectories.
+     * Instructs the `Application` to use traditional routes.
      *
-     * @return string[]
+     * Accepts a string pointing to a routes file, or an array of strings
+     * pointing to multiple route files and alternatively accepts an associative
+     * array mapping specific subdomains to routes files.
+     *
+     * @param  string|array<string,string>  $pages
      */
-    private function discoverFiles(string $path): array
+    public function withTraditionalRoutes(string|array $pages): Application
     {
-        $directoryIterator = new RecursiveDirectoryIterator($path);
-        $iterator = new RecursiveIteratorIterator($directoryIterator);
+        $paths = is_array($pages) ? $pages : ['' => $pages];
+        $isList = array_is_list($paths);
 
-        $files = [];
+        foreach ($paths as $subdomain => $path) {
+            $bag = new RouteBag($isList ? null : $subdomain);
 
-        /** @var SplFileInfo $file */
-        foreach ($iterator as $file) {
-            if (in_array($file->getBasename(), ['.', '..'])) {
-                continue;
-            }
-
-            $filename = $file->getBasename('.'.$file->getExtension());
-            $pathWithoutExtension = $file->getPath().'/'.$filename;
-
-            $files[] = $pathWithoutExtension;
+            /** @var callable */
+            $fn = include $path;
+            $fn($bag);
+            $this->router->add($bag->routes);
         }
 
-        return $files;
+        return $this;
     }
 
     /**
-     * Handles the given request.
+     * Handles the given request and send a response back to the client.
      */
     public function handle(Request $request): void
     {
-        $this->router->execute($request)->send();
+        $response = $this->router->execute($request);
+        if ($response !== null) {
+            $response->send();
+        }
     }
 }

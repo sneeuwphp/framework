@@ -2,9 +2,15 @@
 
 namespace Sneeuw\Http;
 
-// TODO: fill with the rest of the http methods
 enum HttpMethod: string
 {
-    case GET = 'get';
-    case POST = 'post';
+    case GET = 'GET';
+    case HEAD = 'HEAD';
+    case POST = 'POST';
+    case PUT = 'PUT';
+    case DELETE = 'DELETE';
+    case CONNECT = 'CONNECT';
+    case OPTIONS = 'OPTIONS';
+    case TRACE = 'TRACE';
+    case PATCH = 'PATCH';
 }

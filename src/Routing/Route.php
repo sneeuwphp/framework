@@ -2,18 +2,22 @@
 
 namespace Sneeuw\Routing;
 
-use Closure;
 use Sneeuw\Http\HttpMethod;
 use Sneeuw\Http\Request;
+use Sneeuw\Http\Response;
 
-// TODO: is this smart?
-class Route
+final readonly class Route
 {
     public function __construct(
         public HttpMethod $method,
+        public ?string $subdomain,
         public string $path,
-        /** @var Closure(Request $request): string */
-        public Closure $handler,
-        public RouteType $type = RouteType::Traditional,
+        /**
+         * The handler callable which will be called when executing this route.
+         *
+         * @var callable(Request, mixed...): Response
+         */
+        public mixed $handler,
+        public RouteType $type,
     ) {}
 }

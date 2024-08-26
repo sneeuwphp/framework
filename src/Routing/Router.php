@@ -2,85 +2,98 @@
 
 namespace Sneeuw\Routing;
 
-use Closure;
-use Sneeuw\Http\HttpMethod;
 use Sneeuw\Http\Request;
 use Sneeuw\Http\Response;
 
-class Router
+/**
+ * Is used by the `Application` to route incoming requests to the correct
+ * handler.
+ */
+final class Router
 {
     /**
      * The routes to match on.
      *
      * @var Route[]
      */
-    private array $routes = [];
+    private array $routes;
 
-    /**
-     * Finds the associated action for the given Request, executes it and
-     * returns the reponse.
-     *
-     * Traditional routes come first, then come file-based routes. Static
-     * routes also come before dynamic ones.
-     */
-    public function execute(Request $request): Response
+    public function __construct()
     {
-        /** @var string */
-        $uri = $request->server['REQUEST_URI'];
-        $path = parse_url($uri, PHP_URL_PATH);
-
-        // Sort routes based on priority
-        $this->sortRoutes();
-
-        // Loop over the routes and find the first one that matches
-        foreach ($this->routes as $route) {
-            $pattern = preg_replace('/\{[a-zA-Z0-9_]+\}/', '([a-zA-Z0-9_]+)', $route->path);
-            $pattern = '#^'.$pattern.'$#';
-
-            if (preg_match($pattern, $path)) {
-                $content = ($route->handler)($request);
-
-                return new Response(200, $content);
-            }
-        }
-
-        return new Response(404);
+        $this->routes = [];
     }
 
     /**
-     * Adds a route.
-     *
-     * @param  Closure(Request): string  $handler
+     * Matches the incoming request to a handler/action, executes it and returns
+     * the response.
      */
-    public function addRoute(HttpMethod $method, string $path, Closure $handler, RouteType $type = RouteType::Traditional): void
+    public function execute(Request $request): ?Response
     {
-        $this->routes[] = new Route($method, $path, $handler, $type);
+        $path = parse_url($request->uri, PHP_URL_PATH);
+        $host = parse_url($_SERVER['HTTP_HOST'], PHP_URL_HOST);
+
+        $this->sort();
+
+        foreach ($this->routes as $route) {
+            if ($route->method->value !== $request->method) {
+                continue;
+            }
+
+            $url = getenv('APP_URL');
+            $subdomain = substr(str_replace($url, '', $host), 0, -1);
+            if (! empty($subdomain) && $route->subdomain !== $subdomain) {
+                continue;
+            }
+
+            $pattern = $route->path;
+
+            // Convert path parameters to regex named capture groups.
+            $pattern = preg_replace(
+                '/\{([a-zA-Z0-9_]+)\}/',
+                '(?P<$1>[a-zA-Z0-9\-._~!$&\'()*+,;=:@%]+)',
+                $pattern);
+
+            // Convert optional path parameters
+            $pattern = preg_replace(
+                '/\{([a-zA-Z0-9_]+)\?\}/',
+                '(?:/(?P<$1>[a-zA-Z0-9\-._~!$&\'()*+,;=:@%]*))?',
+                $pattern);
+
+            $pattern = '#^'.$pattern.'$#';
+            if (preg_match($pattern, $path, $matches)) {
+                $namedGroups = array_filter($matches, 'is_string', ARRAY_FILTER_USE_KEY);
+
+                $fn = $route->handler;
+
+                return new Response($fn($request, ...$namedGroups));
+            }
+        }
+
+        // TODO: return 404
+        return null;
+    }
+
+    /**
+     * Adds routes or a single route.
+     *
+     * @param  Route|Route[]  $routes
+     */
+    public function add(Route|array $route): void
+    {
+        if (is_array($route)) {
+            array_push($this->routes, ...$route);
+
+            return;
+        }
+
+        $this->routes[] = $route;
     }
 
     /**
      * Sorts the routes based on priority.
      */
-    private function sortRoutes(): void
+    private function sort(): void
     {
-        usort($this->routes, function (Route $a, Route $b) {
-            if ($a->type === RouteType::Traditional && $b->type !== RouteType::Traditional) {
-                return -1;
-            }
-            if ($a->type !== RouteType::Traditional && $b->type === RouteType::Traditional) {
-                return 1;
-            }
-
-            $aHasBrace = strpos($a->path, '{') !== false;
-            $bHasBrace = strpos($b->path, '{') !== false;
-
-            if (! $aHasBrace && $bHasBrace) {
-                return -1;
-            }
-            if ($aHasBrace && ! $bHasBrace) {
-                return 1;
-            }
-
-            return 0;
-        });
+        //
     }
 }
