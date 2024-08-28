@@ -12,13 +12,15 @@ use Sneeuw\Http\StatusCode;
 final class Router
 {
     /** @var Route[] */
-    private array $routes = [];
+    public array $routes = [];
 
     /**
      * Matches the incoming request to a handler/action, executes it and returns the response.
      */
     public function execute(Request $request): ?Response
     {
+        $this->sort();
+
         foreach ($this->routes as $route) {
             if ($this->matchRoute($route, $request)) {
                 $path = parse_url($request->uri, PHP_URL_PATH);
@@ -87,19 +89,56 @@ final class Router
      */
     private function convertPathToPattern(string $path): string
     {
-        // Escape forward slashes
         $path = str_replace('/', '\/', $path);
 
-        // Convert optional parameters
         $path = preg_replace('/\{(\w+)\?\}/', '([^\/]*)?', $path);
-
-        // Convert required parameters
         $path = preg_replace('/\{(\w+)\}/', '([^\/]+)', $path);
 
-        // Ensure optional routes can be accessed correctly when no parameter is given
         $path = str_replace("\/([^\/]*)?", "\/?([^\/]*)", $path);
 
-        // Ensure the pattern matches the whole path
         return '/^'.$path.'$/';
+    }
+
+    /**
+     * Sorts routes based on how many segments it has, whether it is static or
+     * dynamic and if the route is dynamic, also sort on whether the parameters
+     * are optional or required.
+     */
+    public function sort(): void
+    {
+        usort($this->routes, function (Route $a, Route $b) {
+            $aSegments = explode('/', trim($a->path, '/'));
+            $bSegments = explode('/', trim($b->path, '/'));
+
+            // Prioritize routes with more segments
+            $segmentCountDiff = count($aSegments) - count($bSegments);
+            if ($segmentCountDiff !== 0) {
+                return $segmentCountDiff < 0 ? 1 : -1;
+            }
+
+            foreach ($aSegments as $index => $segment) {
+                $aIsDynamic = preg_match('/\{(\w+)\??\}/', $segment);
+                $bIsDynamic = preg_match('/\{(\w+)\??\}/', $bSegments[$index]);
+
+                // Prioritize static routes
+                if ($aIsDynamic && ! $bIsDynamic) {
+                    return 1;
+                } elseif (! $aIsDynamic && $bIsDynamic) {
+                    return -1;
+                }
+
+                if ($aIsDynamic && $bIsDynamic) {
+                    $aIsOptional = strpos($segment, '?') !== false;
+                    $bIsOptional = strpos($bSegments[$index], '?') !== false;
+
+                    // Prioritize required parameters
+                    if ($aIsOptional && ! $bIsOptional) {
+                        return 1;
+                    } elseif (! $aIsOptional && $bIsOptional) {
+                        return -1;
+                    }
+                }
+            }
+        });
     }
 }

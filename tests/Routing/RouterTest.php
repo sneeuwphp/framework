@@ -1,6 +1,10 @@
 <?php
 
 use PHPUnit\Framework\TestCase;
+use Sneeuw\Http\HttpMethod;
+use Sneeuw\Routing\Route;
+use Sneeuw\Routing\Router;
+use Sneeuw\Routing\RouteType;
 
 class RouterTest extends TestCase
 {
@@ -12,6 +16,34 @@ class RouterTest extends TestCase
      */
     public function testCorrectHandlerCalledForRoute(): void
     {
-        //
+        $createRouteFromPath = function (string $path): Route {
+            return new Route(HttpMethod::GET, null, $path, '', RouteType::Traditional);
+        };
+
+        $routes = array_map($createRouteFromPath, [
+            '/posts/{id}',
+            '/posts/{id}/{slug?}',
+            '/posts/edit',
+            '/{id}',
+            '/{id}/{sec?}',
+            '/static',
+        ]);
+
+        $expectedOrder = [
+            '/posts/{id}/{slug?}',
+            '/posts/edit',
+            '/posts/{id}',
+            '/{id}/{sec?}',
+            '/static',
+            '/{id}',
+        ];
+
+        $router = new Router;
+        $router->add($routes);
+        $router->sort();
+
+        $actualOrder = array_map(fn ($r) => $r->path, $router->routes);
+
+        $this->assertSame($expectedOrder, $actualOrder);
     }
 }
