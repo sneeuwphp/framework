@@ -190,4 +190,17 @@ class Request
     {
         return fopen('php://input', 'rb');
     }
+
+    /**
+     * Returns the subdomain part of the URL.
+     */
+    public function subdomain(): ?string
+    {
+        $appUrl = getenv('APP_URL');
+        $host = parse_url($_SERVER['HTTP_HOST'], PHP_URL_HOST);
+
+        $onlySubdomain = substr(str_replace($appUrl, '', $host), 0, -1);
+
+        return empty($onlySubdomain) ? null : $onlySubdomain;
+    }
 }

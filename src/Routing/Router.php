@@ -4,79 +4,39 @@ namespace Sneeuw\Routing;
 
 use Sneeuw\Http\Request;
 use Sneeuw\Http\Response;
+use Sneeuw\Http\StatusCode;
 
 /**
- * Is used by the `Application` to route incoming requests to the correct
- * handler.
+ * Routes incoming requests to the correct handler.
  */
 final class Router
 {
-    /**
-     * The routes to match on.
-     *
-     * @var Route[]
-     */
-    private array $routes;
-
-    public function __construct()
-    {
-        $this->routes = [];
-    }
+    /** @var Route[] */
+    private array $routes = [];
 
     /**
-     * Matches the incoming request to a handler/action, executes it and returns
-     * the response.
+     * Matches the incoming request to a handler/action, executes it and returns the response.
      */
     public function execute(Request $request): ?Response
     {
-        $path = parse_url($request->uri, PHP_URL_PATH);
-        $host = parse_url($_SERVER['HTTP_HOST'], PHP_URL_HOST);
-
-        $this->sort();
-
         foreach ($this->routes as $route) {
-            if ($route->method->value !== $request->method) {
-                continue;
-            }
+            if ($this->matchRoute($route, $request)) {
+                $path = parse_url($request->uri, PHP_URL_PATH);
+                $params = $this->extractParams($route->path, $path);
 
-            $url = getenv('APP_URL');
-            $subdomain = substr(str_replace($url, '', $host), 0, -1);
-            if (! empty($subdomain) && $route->subdomain !== $subdomain) {
-                continue;
-            }
+                $handler = $route->handler;
 
-            $pattern = $route->path;
-
-            // Convert path parameters to regex named capture groups.
-            $pattern = preg_replace(
-                '/\{([a-zA-Z0-9_]+)\}/',
-                '(?P<$1>[a-zA-Z0-9\-._~!$&\'()*+,;=:@%]+)',
-                $pattern);
-
-            // Convert optional path parameters
-            $pattern = preg_replace(
-                '/\{([a-zA-Z0-9_]+)\?\}/',
-                '(?:/(?P<$1>[a-zA-Z0-9\-._~!$&\'()*+,;=:@%]*))?',
-                $pattern);
-
-            $pattern = '#^'.$pattern.'$#';
-            if (preg_match($pattern, $path, $matches)) {
-                $namedGroups = array_filter($matches, 'is_string', ARRAY_FILTER_USE_KEY);
-
-                $fn = $route->handler;
-
-                return new Response($fn($request, ...$namedGroups));
+                return new Response($handler($request, ...$params));
             }
         }
 
-        // TODO: return 404
-        return null;
+        return new Response(null, StatusCode::NOT_FOUND);
     }
 
     /**
      * Adds routes or a single route.
      *
-     * @param  Route|Route[]  $routes
+     * @param  Route|Route[]  $route
      */
     public function add(Route|array $route): void
     {
@@ -89,11 +49,57 @@ final class Router
         $this->routes[] = $route;
     }
 
-    /**
-     * Sorts the routes based on priority.
-     */
-    private function sort(): void
+    private function matchRoute(Route $route, Request $request): bool
     {
-        //
+        if ($route->method->value !== $request->method) {
+            return false;
+        }
+
+        $subdomain = $request->subdomain();
+        if ($subdomain !== null && $route->subdomain !== $subdomain) {
+            return false;
+        }
+
+        if (strlen($request->uri) > 1 && substr($request->uri, -1) === '/') {
+            return false;
+        }
+
+        $pattern = $this->convertPathToPattern($route->path);
+        $path = parse_url($request->uri, PHP_URL_PATH);
+
+        return preg_match($pattern, $path) === 1;
+    }
+
+    private function extractParams(string $routePath, string $requestPath): array
+    {
+        $pattern = $this->convertPathToPattern($routePath);
+        preg_match($pattern, $requestPath, $matches);
+
+        array_shift($matches);
+
+        $matches = array_filter($matches, fn ($v) => $v !== '');
+
+        return $matches;
+    }
+
+    /**
+     * @return non-empty-string
+     */
+    private function convertPathToPattern(string $path): string
+    {
+        // Escape forward slashes
+        $path = str_replace('/', '\/', $path);
+
+        // Convert optional parameters
+        $path = preg_replace('/\{(\w+)\?\}/', '([^\/]*)?', $path);
+
+        // Convert required parameters
+        $path = preg_replace('/\{(\w+)\}/', '([^\/]+)', $path);
+
+        // Ensure optional routes can be accessed correctly when no parameter is given
+        $path = str_replace("\/([^\/]*)?", "\/?([^\/]*)", $path);
+
+        // Ensure the pattern matches the whole path
+        return '/^'.$path.'$/';
     }
 }

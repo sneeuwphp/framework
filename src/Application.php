@@ -75,7 +75,7 @@ final readonly class Application
         $isList = array_is_list($paths);
 
         foreach ($paths as $subdomain => $path) {
-            $bag = new RouteBag($isList ? null : $subdomain);
+            $bag = new RouteBag($isList || empty($subdomain) ? null : $subdomain);
 
             /** @var callable */
             $fn = include $path;
